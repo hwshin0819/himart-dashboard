@@ -368,6 +368,43 @@
       align-items: center;
       gap: 6px;
     }
+    
+    /* Branch List 2-column Grid */
+    #branchList {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      align-content: start;
+    }
+    
+    #branchList .branch-item {
+      padding: 12px;
+      gap: 8px;
+    }
+
+    #branchList .branch-item-name {
+      font-size: 13px;
+    }
+
+    #branchList .branch-item-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+    }
+
+    #branchList .branch-item-stats {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    #branchList .branch-item-stats b {
+      font-weight: 700;
+      color: var(--text);
+    }
 
     /* List Wrapper */
     .list-wrap {
@@ -1145,16 +1182,6 @@
           </div>
 
           <div class="branch-stats-card">
-            <div class="branch-stats-counts">
-              <div class="stat-badge completed">
-                <span>🟢 완료</span>
-                <span id="detail-stat-y">0</span>
-              </div>
-              <div class="stat-badge recruiting">
-                <span>🟡 모집중</span>
-                <span id="detail-stat-n">0</span>
-              </div>
-            </div>
             <div class="progress-section">
               <div class="progress-title-row">
                 <span>목표 달성률 (목표 50개)</span>
@@ -1167,7 +1194,7 @@
           </div>
 
           <div class="panel-header">
-            <h3>🏢 소속 중개사 리스트 (<span id="detail-broker-count">0</span>)</h3>
+            <h3>🏢 타겟 중개사 리스트 (<span id="detail-broker-count">0</span>)</h3>
           </div>
           <div class="list-wrap" id="detailBrokerList">
             <!-- Populated via Javascript -->
@@ -1705,8 +1732,9 @@ function renderBranchList() {
         </div>
         <div class="branch-item-addr">${branch.addr}</div>
         <div class="branch-item-stats">
-          <span class="stat-lbl-comp">🟢 완료 <b>${completed}</b></span>
-          <span class="stat-lbl-rec">🟡 모집중 <b>${recruiting}</b></span>
+          <span>🟢 완료 <b>${completed}</b>개</span>
+          <span>|</span>
+          <span>🟡 모집중 <b>${recruiting}</b>개</span>
         </div>
         <div class="branch-item-progress-wrap">
           <div class="branch-item-progress-bar" style="width: ${ratePercent}%"></div>
@@ -1734,8 +1762,6 @@ function renderBranchDetail() {
   document.getElementById('detail-branch-name').textContent = `🏪 ${gSelected.store_name}`;
   document.getElementById('detail-branch-addr').textContent = gSelected.addr;
   
-  document.getElementById('detail-stat-y').textContent = completed;
-  document.getElementById('detail-stat-n').textContent = recruiting;
   document.getElementById('detail-progress-percent').textContent = `${progressPercent}%`;
   document.getElementById('detail-progress-bar').style.width = `${progressPercent}%`;
 
