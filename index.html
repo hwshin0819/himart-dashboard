@@ -1250,7 +1250,7 @@ function fetchCSV(url, headerEnabled = true) {
       download: true,
       header: headerEnabled,
       skipEmptyLines: true,
-      transformHeader: h => h.trim(),
+      transformHeader: h => h.replace(/^\ufeff/, '').trim(),
       complete: r => resolve(r.data),
       error: reject
     });
@@ -1265,15 +1265,14 @@ function calcDist(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Find column name using exact or case-insensitive matching
+// Find column name using exact or case-insensitive matching, ignoring BOM and spaces
 function findColumn(row, options) {
   if (!row) return null;
-  for (const opt of options) {
-    if (row[opt] !== undefined) return opt;
-  }
+  const cleanStr = s => s.replace(/^\ufeff/, '').trim().toLowerCase();
   const keys = Object.keys(row);
   for (const opt of options) {
-    const found = keys.find(k => k.toLowerCase() === opt.toLowerCase());
+    const cleanOpt = cleanStr(opt);
+    const found = keys.find(k => cleanStr(k) === cleanOpt);
     if (found) return found;
   }
   return null;
