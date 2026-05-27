@@ -1236,6 +1236,30 @@ const CFG = {
   ]
 };
 
+const DEFAULT_RADIUS = {
+  "미아사거리": 1,
+  "구리역": 1.5,
+  "잠실": 2.5,
+  "월드타워": 1.5,
+  "철산역": 1,
+  "주안": 3.5,
+  "부천중동": 2,
+  "안산롯데백화점": 3,
+  "수원": 2,
+  "단계": 4.5,
+  "춘천": 3,
+  "분평": 2.5,
+  "둔산": 3,
+  "송천": 1.5,
+  "상무": 3,
+  "경산": 2,
+  "월배": 1.5,
+  "동래": 1,
+  "울산": 1.5,
+  "상남": 1.5,
+  "신제주": 10
+};
+
 /* ── APPLICATION STATE ── */
 let gMap = null;
 let gHimart = [];         // Loaded Himart branches (from Sheet 1)
@@ -1597,7 +1621,8 @@ function selectBranchByName(branchName) {
 
   // Draw Circle
   const savedRad = localStorage.getItem(`himart_radius_${branch.store_name}`);
-  const radius = savedRad ? parseFloat(savedRad) : 3.0;
+  const defaultRad = DEFAULT_RADIUS[branch.store_name] !== undefined ? DEFAULT_RADIUS[branch.store_name] : 3.0;
+  const radius = savedRad ? parseFloat(savedRad) : defaultRad;
 
   if (gCircle) gCircle.setMap(null);
   gCircle = new kakao.maps.Circle({
