@@ -1164,9 +1164,31 @@
 <script>
 /* ── CONFIGURATION ── */
 const CFG = {
-  HIMART_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRUsqghnapaMm7WMoR7fRfdacrNQBsXSBp9nH-s1awVW2kZgEfTopzRQzoNLGnwITxHCq8fG-DDYmNS/pub?gid=0&single=true&output=csv',
   COORD_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRUsqghnapaMm7WMoR7fRfdacrNQBsXSBp9nH-s1awVW2kZgEfTopzRQzoNLGnwITxHCq8fG-DDYmNS/pub?gid=433284289&single=true&output=csv',
-  POPUP_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSzQapT-wpPEFA5ZAxI6fgVtOfKH7kOvBcOyxWVU7w-VcifimZa8bDLBCNjf-r9yhLXNLm-OsQn2LS3/pub?gid=0&single=true&output=csv'
+  POPUP_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSzQapT-wpPEFA5ZAxI6fgVtOfKH7kOvBcOyxWVU7w-VcifimZa8bDLBCNjf-r9yhLXNLm-OsQn2LS3/pub?gid=0&single=true&output=csv',
+  HIMART_BRANCHES: [
+    { name: '미아사거리', addr: '서울특별시 강북구 도봉로 10', lat: 37.6099513, lng: 127.0307965 },
+    { name: '구리역', addr: '경기도 구리시 경춘로 268', lat: 37.6021574, lng: 127.1449179 },
+    { name: '잠실', addr: '서울특별시 송파구 올림픽로 240', lat: 37.5119633, lng: 127.0833925 },
+    { name: '월드타워', addr: '서울특별시 송파구 올림픽로 300', lat: 37.5134449, lng: 127.1041611 },
+    { name: '철산역', addr: '경기도 광명시 철산로 22', lat: 37.475903, lng: 126.8687272 },
+    { name: '주안', addr: '인천광역시 미추홀구 경원대로 757', lat: 37.4504664, lng: 126.6893734 },
+    { name: '부천중동', addr: '경기도 부천시 원미구 길주로 255', lat: 37.5042374, lng: 126.770891 },
+    { name: '안산롯데백화점', addr: '경기도 안산시 단원구 중앙대로 873', lat: 37.3173028, lng: 126.833762 },
+    { name: '수원', addr: '경기도 수원시 권선구 경수대로 386', lat: 37.2608192, lng: 127.0246918 },
+    { name: '단계', addr: '강원특별자치도 원주시 북원로 2374', lat: 37.3568283, lng: 127.9367404 },
+    { name: '춘천', addr: '강원특별자치도 춘천시 후석로 6', lat: 37.8556646, lng: 127.7391398 },
+    { name: '분평', addr: '충청북도 청주시 서원구 1순환로 1120', lat: 36.6058157, lng: 127.4906595 },
+    { name: '둔산', addr: '대전광역시 서구 대덕대로 255', lat: 36.3554392, lng: 127.378919 },
+    { name: '송천', addr: '전북특별자치도 전주시 덕진구 송천중앙로 247', lat: 35.869168, lng: 127.1210192 },
+    { name: '상무', addr: '광주광역시 서구 상무대로 820', lat: 35.1532447, lng: 126.841929 },
+    { name: '경산', addr: '경상북도 경산시 대학로 74', lat: 35.8351073, lng: 128.7282114 },
+    { name: '월배', addr: '대구광역시 달서구 월배로 59, (진천동)', lat: 35.8139058, lng: 128.5209512 },
+    { name: '동래', addr: '부산광역시 동래구 중앙대로 1393', lat: 35.2118021, lng: 129.0774473 },
+    { name: '울산', addr: '울산광역시 남구 삼산로 238', lat: 35.5381816, lng: 129.3330666 },
+    { name: '상남', addr: '경상남도 창원시 성산구 마디미로22번길 17', lat: 35.2230919, lng: 128.6828004 },
+    { name: '신제주', addr: '제주특별자치도 제주시 도령로 16', lat: 33.4865771, lng: 126.4811774 }
+  ]
 };
 
 /* ── APPLICATION STATE ── */
@@ -1608,33 +1630,26 @@ function onRadiusSliderChange(val) {
 function renderTopKPIs() {
   const selectedSido = document.getElementById('sidoSel').value;
   
-  // Filter branches based on Sido
-  const activeBranches = selectedSido 
-    ? gHimart.filter(b => b.addr.includes(selectedSido))
-    : gHimart;
-    
-  const branchCount = activeBranches.length;
-  const totalGoal = branchCount * 50;
-
-  // Active branches lookup map
-  const activeBranchNames = new Set(activeBranches.map(b => b.name));
-
-  // Count Completed
-  const completedCount = gAgents.filter(broker => 
-    activeBranchNames.has(broker.branch) && broker.participation === 'Y'
-  ).length;
-
+  // Overall stats (always static 21 and 1050 as requested)
+  const branchCount = gHimart.length; // 21
+  const totalGoal = 1050; // 21 * 50
+  
+  // Count Completed (overall)
+  const completedCount = gAgents.filter(broker => broker.participation === 'Y').length;
   const rate = totalGoal > 0 ? (completedCount / totalGoal) * 100 : 0;
 
   // Render values
-  document.getElementById('kpi-branches').textContent = `${branchCount}개` + (selectedSido ? ` (${selectedSido})` : '');
+  document.getElementById('kpi-branches').textContent = `${branchCount}개`;
   document.getElementById('kpi-goal').textContent = `${totalGoal.toLocaleString()}명`;
   document.getElementById('kpi-completed').textContent = `${completedCount.toLocaleString()}명`;
   document.getElementById('kpi-rate').textContent = `${rate.toFixed(1)}%`;
   document.getElementById('kpi-progress-bar').style.width = `${Math.min(rate, 100)}%`;
   
-  // Update Sido filter branch counts
-  document.getElementById('branch-count').textContent = branchCount;
+  // Update Sido filter branch counts in the list header
+  const filteredBranchesCount = selectedSido 
+    ? gHimart.filter(b => b.addr.includes(selectedSido)).length
+    : gHimart.length;
+  document.getElementById('branch-count').textContent = filteredBranchesCount;
 }
 
 function renderBranchList() {
@@ -1829,25 +1844,8 @@ async function start() {
     setLoading(true, '지도 및 서비스 초기화 중...');
     initMap();
 
-    // 1. Load Himart branches
-    setLoading(true, '하이마트 지점 데이터를 불러오는 중...');
-    const himartRaw = await fetchCSV(CFG.HIMART_URL);
-    gHimart = himartRaw.map(row => {
-      const nameKey = findColumn(row, ['지점명', '지점']);
-      const addrKey = findColumn(row, ['주소', '도로명주소', '도로명 주소']);
-      const latKey = findColumn(row, ['위도', 'LAT', 'lat', 'Latitude']);
-      const lngKey = findColumn(row, ['경도', 'LNG', 'lng', 'Longitude']);
-      
-      const lat = parseFloat(row[latKey]);
-      const lng = parseFloat(row[lngKey]);
-      
-      return {
-        name: row[nameKey] ? row[nameKey].trim() : '',
-        addr: row[addrKey] ? row[addrKey].trim() : '',
-        lat: !isNaN(lat) ? lat : null,
-        lng: !isNaN(lng) ? lng : null
-      };
-    }).filter(b => b.name && b.lat && b.lng);
+    // 1. Load Himart branches (hardcoded)
+    gHimart = CFG.HIMART_BRANCHES;
     console.log(`Loaded ${gHimart.length} Himart branches.`);
 
     // 2. Load Coordinate Lookup (19,000 sheet)
