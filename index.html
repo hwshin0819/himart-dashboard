@@ -499,21 +499,36 @@
       flex-shrink: 0;
     }
 
+    .detail-back-bar {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--light);
+      flex-shrink: 0;
+    }
+
     .btn-back {
-      border: none;
-      background: transparent;
-      font-size: 12px;
-      font-weight: 800;
-      color: var(--muted);
+      border: 1px solid var(--border);
+      background: var(--white);
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--text);
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 4px;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 16px;
+      border-radius: 8px;
       transition: var(--transition);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      width: 100%;
     }
 
     .btn-back:hover {
-      color: var(--text);
+      background: var(--light);
+      border-color: #CBD5E1;
+      color: var(--primary);
+      transform: translateY(-1px);
     }
 
     .detail-header {
@@ -1086,14 +1101,7 @@
             <option>경남</option><option>제주</option>
           </select>
         </div>
-        <div class="filter-group">
-          <span class="filter-label">🟢 참여 상태 필터</span>
-          <div class="toggle-buttons">
-            <button class="toggle-btn active" id="btn-status-all" onclick="onStatusFilterChange('all')">전체</button>
-            <button class="toggle-btn" id="btn-status-y" onclick="onStatusFilterChange('Y')">🟢 모집완료</button>
-            <button class="toggle-btn" id="btn-status-n" onclick="onStatusFilterChange('N')">🟡 모집중</button>
-          </div>
-        </div>
+        <!-- Status filter moved to detail panel -->
       </div>
 
       <!-- Scrollable Dynamic Panels -->
@@ -1125,6 +1133,15 @@
               <span class="slider-value" id="radiusVal">3.0 km</span>
             </div>
             <input type="range" id="radiusSlider" min="1" max="10" value="3" step="0.5" oninput="onRadiusSliderInput(this.value)" onchange="onRadiusSliderChange(this.value)" />
+          </div>
+
+          <!-- Status toggle filter relocated here -->
+          <div class="detail-filter-section" style="padding: 12px 20px; background: var(--white); border-bottom: 1px solid var(--border); flex-shrink: 0;">
+            <div class="toggle-buttons">
+              <button class="toggle-btn active" id="btn-status-all" onclick="onStatusFilterChange('all')">전체</button>
+              <button class="toggle-btn" id="btn-status-y" onclick="onStatusFilterChange('Y')">🟢 모집완료</button>
+              <button class="toggle-btn" id="btn-status-n" onclick="onStatusFilterChange('N')">🟡 모집중</button>
+            </div>
           </div>
 
           <div class="branch-stats-card">
@@ -1550,14 +1567,14 @@ function selectBranchByName(branchName) {
     fillOpacity: 0.05
   });
 
-  // Dynamic Center & Zoom
-  gMap.panTo(new kakao.maps.LatLng(branch.lat, branch.lng));
+  // Dynamic Center & Zoom (Set zoom level first to ensure correct center alignment)
   let zoomLevel = 6;
   if (radius <= 1.5) zoomLevel = 4;
   else if (radius <= 3.5) zoomLevel = 5;
   else if (radius <= 6.5) zoomLevel = 6;
   else zoomLevel = 7;
   gMap.setLevel(zoomLevel);
+  gMap.setCenter(new kakao.maps.LatLng(branch.lat, branch.lng));
 
   // Switch Panel View
   document.getElementById('branchListView').classList.remove('active');
