@@ -383,7 +383,8 @@
     }
 
     #branchList .branch-item-name {
-      font-size: 13px;
+      font-size: 12.5px;
+      font-weight: 400;
     }
 
     #branchList .branch-item-badge {
@@ -1051,7 +1052,7 @@
   <!-- Top Header Dashboard -->
   <header class="app-header">
     <div class="logo-area">
-      <h1 class="logo-title" style="color: #000000; font-weight: 800;">
+      <h1 class="logo-title" style="color: #000000; font-weight: 400;">
         프롭티어 X 롯데하이마트 제휴 중개사모집
       </h1>
     </div>
@@ -1393,6 +1394,20 @@ function makeRecruitingMarkerImage() {
   });
 }
 
+// Gray / Out-of-radius marker: Light gray filled circle
+function makeOutOfRadiusMarkerImage() {
+  return getCachedMarkerImage('gray_marker', () => {
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22'>
+      <circle cx='11' cy='11' r='9' fill='#94A3B8' stroke='#FFFFFF' stroke-width='2' />
+    </svg>`;
+    return new kakao.maps.MarkerImage(
+      'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+      new kakao.maps.Size(22, 22),
+      { offset: new kakao.maps.Point(11, 11) }
+    );
+  });
+}
+
 /* ── MAP OPERATIONS ── */
 function initMap() {
   const container = document.getElementById('map');
@@ -1475,15 +1490,11 @@ function renderBrokerMarkers() {
 
   if (!gSelected) return;
 
-  const radius = parseFloat(document.getElementById('radiusSlider').value) || 3.0;
-
-  // Filter brokers belonging to the selected branch and within the radius, matching the status filter
+  // Filter brokers belonging to the selected branch and matching status filter (no radius check)
   let branchBrokers = gAgents.filter(broker => {
     // 1. Match branch
     if (broker.branch !== gSelected.store_name) return false;
-    // 2. Match radius
-    if (broker.distance === null || broker.distance > radius) return false;
-    // 3. Match status filter
+    // 2. Match status filter
     if (gStatusFilter !== 'all' && broker.participation !== gStatusFilter) return false;
     
     return true;
@@ -1498,7 +1509,6 @@ function renderBrokerMarkers() {
 
     const m = new kakao.maps.Marker({
       position: new kakao.maps.LatLng(broker.brokerLat, broker.brokerLng),
-      image: broker.participation === 'Y' ? makeCompletedMarkerImage() : makeRecruitingMarkerImage(),
       zIndex: 15
     });
 
@@ -1508,9 +1518,13 @@ function renderBrokerMarkers() {
       showBrokerOverlay(broker, m);
     });
 
+    m.broker = broker;
     broker._marker = m;
     gAMarkers.push(m);
   });
+
+  // Apply real-time radius-based colors & opacity
+  updateMarkersByRadius();
 }
 
 /* ── OVERLAYS ── */
@@ -1651,6 +1665,63 @@ function onRadiusSliderInput(val) {
   const num = parseFloat(val);
   document.getElementById('radiusVal').textContent = `${num.toFixed(1)} km`;
   if (gCircle) gCircle.setRadius(num * 1000);
+  
+  // Real-time updates during drag
+  updateMarkersByRadius();
+  updateStatsByRadius();
+}
+
+function updateMarkersByRadius() {
+  if (!gSelected) return;
+  const radius = parseFloat(document.getElementById('radiusSlider').value) || 3.0;
+
+  gAMarkers.forEach(m => {
+    const broker = m.broker;
+    if (!broker) return;
+
+    const isInside = broker.distance !== null && broker.distance <= radius;
+
+    if (isInside) {
+      // Inside radius: Keep original color and opacity (1.0)
+      const img = broker.participation === 'Y' ? makeCompletedMarkerImage() : makeRecruitingMarkerImage();
+      m.setImage(img);
+      m.setOpacity(1.0);
+      m.setZIndex(15);
+    } else {
+      // Outside radius: Gray color, lower opacity (0.4)
+      m.setImage(makeOutOfRadiusMarkerImage());
+      m.setOpacity(0.4);
+      m.setZIndex(10);
+    }
+  });
+}
+
+function updateStatsByRadius() {
+  if (!gSelected) return;
+  const radius = parseFloat(document.getElementById('radiusSlider').value) || 3.0;
+
+  // Filter brokers for the selected branch and within the radius
+  const branchBrokers = gAgents.filter(broker => broker.branch === gSelected.store_name);
+  const radiusFiltered = branchBrokers.filter(broker => broker.distance !== null && broker.distance <= radius);
+
+  const completed = radiusFiltered.filter(broker => broker.participation === 'Y').length;
+  const recruiting = radiusFiltered.filter(broker => broker.participation === 'N').length;
+  const progressPercent = Math.min(Math.round((completed / 50) * 100), 100);
+
+  // Update real-time stats count summary text
+  const summaryEl = document.getElementById('detail-stats-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      모집완료(<span style="color: var(--green); font-weight: 800;">${completed}개</span>), 
+      모집중(<span style="color: var(--yellow); font-weight: 800;">${recruiting}개</span>)
+    `;
+  }
+
+  // Update progress bar
+  const percentEl = document.getElementById('detail-progress-percent');
+  if (percentEl) percentEl.textContent = `${progressPercent}%`;
+  const barEl = document.getElementById('detail-progress-bar');
+  if (barEl) barEl.style.width = `${progressPercent}%`;
 }
 
 function onRadiusSliderChange(val) {
@@ -1719,9 +1790,13 @@ function renderBranchList() {
 
   // Calculate completed/recruiting status for each branch
   listWrap.innerHTML = filteredBranches.map(branch => {
+    const branchBrokers = gAgents.filter(broker => broker.branch === branch.store_name);
+    const completed = branchBrokers.filter(broker => broker.participation === 'Y').length;
+    const ratePercent = Math.min(Math.round((completed / 50) * 100), 100);
+
     return `
       <div class="branch-item" onclick="selectBranchByName('${branch.store_name}')">
-        <span class="branch-item-name">${branch.store_name}</span>
+        <span class="branch-item-name">${branch.store_name} (${ratePercent}% / ${completed}개)</span>
       </div>
     `;
   }).join('');
