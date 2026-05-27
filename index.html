@@ -1051,12 +1051,9 @@
   <!-- Top Header Dashboard -->
   <header class="app-header">
     <div class="logo-area">
-      <h1 class="logo-title">
-        <span class="brand-pt">프롭티어</span>
-        <span class="brand-divider">×</span>
-        <span class="brand-hm">롯데하이마트</span>
+      <h1 class="logo-title" style="color: #000000; font-weight: 800;">
+        프롭티어 X 롯데하이마트 제휴 중개사모집
       </h1>
-      <span class="logo-subtitle">영업 제휴 대시보드</span>
     </div>
     
     <div class="kpi-grid">
@@ -1108,8 +1105,8 @@
       <div class="legend">
         <div class="legend-title">범례</div>
         <div class="legend-row">
-          <div class="ldot" style="background:#2563EB;"></div>
-          <span>🔵 하이마트 지점</span>
+          <div class="ldot" style="background:#E30613;"></div>
+          <span>🔴 하이마트 지점</span>
         </div>
         <div class="legend-row">
           <div class="ldot" style="background:#10B981;"></div>
@@ -1182,6 +1179,9 @@
           </div>
 
           <div class="branch-stats-card">
+            <div id="detail-stats-summary" style="font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 8px;">
+              모집완료(0개), 모집중(0개)
+            </div>
             <div class="progress-section">
               <div class="progress-title-row">
                 <span>목표 달성률 (목표 50개)</span>
@@ -1350,17 +1350,17 @@ function getCachedMarkerImage(key, fn) {
   return _markerImageCache[key];
 }
 
-// Himart: Blue circle with a white 'H'
+// Himart: Red circle with a white 'H' (size 30px)
 function makeHimartMarkerImage() {
   return getCachedMarkerImage('himart_marker', () => {
-    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 36 36'>
-      <circle cx='18' cy='18' r='16' fill='#2563EB' stroke='#FFFFFF' stroke-width='2.5' />
-      <text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' fill='#FFFFFF' font-size='16' font-weight='900' font-family='Pretendard, Noto Sans KR'>H</text>
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'>
+      <circle cx='15' cy='15' r='13' fill='#E30613' stroke='#FFFFFF' stroke-width='2' />
+      <text x='50%' y='52%' dominant-baseline='middle' text-anchor='middle' fill='#FFFFFF' font-size='13' font-weight='900' font-family='Pretendard, Noto Sans KR'>H</text>
     </svg>`;
     return new kakao.maps.MarkerImage(
       'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
-      new kakao.maps.Size(36, 36),
-      { offset: new kakao.maps.Point(18, 18) }
+      new kakao.maps.Size(30, 30),
+      { offset: new kakao.maps.Point(15, 15) }
     );
   });
 }
@@ -1719,26 +1719,9 @@ function renderBranchList() {
 
   // Calculate completed/recruiting status for each branch
   listWrap.innerHTML = filteredBranches.map(branch => {
-    const branchBrokers = gAgents.filter(broker => broker.branch === branch.store_name);
-    const completed = branchBrokers.filter(broker => broker.participation === 'Y').length;
-    const recruiting = branchBrokers.filter(broker => broker.participation === 'N').length;
-    const ratePercent = Math.min(Math.round((completed / 50) * 100), 100);
-
     return `
       <div class="branch-item" onclick="selectBranchByName('${branch.store_name}')">
-        <div class="branch-item-header">
-          <span class="branch-item-name">🏪 ${branch.store_name}</span>
-          <span class="branch-item-badge ${ratePercent >= 100 ? 'goal-reached' : ''}">${ratePercent}% 완료</span>
-        </div>
-        <div class="branch-item-addr">${branch.addr}</div>
-        <div class="branch-item-stats">
-          <span>🟢 완료 <b>${completed}</b>개</span>
-          <span>|</span>
-          <span>🟡 모집중 <b>${recruiting}</b>개</span>
-        </div>
-        <div class="branch-item-progress-wrap">
-          <div class="branch-item-progress-bar" style="width: ${ratePercent}%"></div>
-        </div>
+        <span class="branch-item-name">${branch.store_name}</span>
       </div>
     `;
   }).join('');
@@ -1761,6 +1744,12 @@ function renderBranchDetail() {
   // Fill in detail text
   document.getElementById('detail-branch-name').textContent = `🏪 ${gSelected.store_name}`;
   document.getElementById('detail-branch-addr').textContent = gSelected.addr;
+  
+  // Set real-time summary text
+  document.getElementById('detail-stats-summary').innerHTML = `
+    모집완료(<span style="color: var(--green); font-weight: 800;">${completed}개</span>), 
+    모집중(<span style="color: var(--yellow); font-weight: 800;">${recruiting}개</span>)
+  `;
   
   document.getElementById('detail-progress-percent').textContent = `${progressPercent}%`;
   document.getElementById('detail-progress-bar').style.width = `${progressPercent}%`;
