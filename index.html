@@ -1131,7 +1131,7 @@
     <!-- Sidebar controls and lists -->
     <div class="sidebar">
       <!-- Static Filters at top of Sidebar -->
-      <div class="sidebar-filters">
+      <div class="sidebar-filters" style="display: flex; flex-direction: column; gap: 10px;">
         <div class="filter-group">
           <span class="filter-label">📍 지역 필터</span>
           <select class="sel" id="sidoSel" onchange="onRegionChange()">
@@ -1144,7 +1144,14 @@
             <option>경남</option><option>제주</option>
           </select>
         </div>
-        <!-- Status filter moved to detail panel -->
+        <div class="filter-group">
+          <span class="filter-label">🟢 모집 구분 필터</span>
+          <div class="toggle-buttons">
+            <button class="toggle-btn active" id="btn-status-all" onclick="onStatusFilterChange('all')">전체</button>
+            <button class="toggle-btn" id="btn-status-y" onclick="onStatusFilterChange('Y')">🟢 모집완료</button>
+            <button class="toggle-btn" id="btn-status-n" onclick="onStatusFilterChange('N')">🟡 모집중</button>
+          </div>
+        </div>
       </div>
 
       <!-- Scrollable Dynamic Panels -->
@@ -1178,14 +1185,7 @@
             <input type="range" id="radiusSlider" min="1" max="10" value="3" step="0.5" oninput="onRadiusSliderInput(this.value)" onchange="onRadiusSliderChange(this.value)" />
           </div>
 
-          <!-- Status toggle filter relocated here -->
-          <div class="detail-filter-section" style="padding: 12px 20px; background: var(--white); border-bottom: 1px solid var(--border); flex-shrink: 0;">
-            <div class="toggle-buttons">
-              <button class="toggle-btn active" id="btn-status-all" onclick="onStatusFilterChange('all')">전체</button>
-              <button class="toggle-btn" id="btn-status-y" onclick="onStatusFilterChange('Y')">🟢 모집완료</button>
-              <button class="toggle-btn" id="btn-status-n" onclick="onStatusFilterChange('N')">🟡 모집중</button>
-            </div>
-          </div>
+
 
           <div class="branch-stats-card">
             <div id="detail-stats-summary" style="font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 8px;">
@@ -1393,6 +1393,10 @@ async function loadSheetData() {
       const distanceVal = parseFloat(row[5]);
       const listings = parseInt(row[6]) || 0;
       const participation = (row[7] || '').trim().toUpperCase(); // Y or N
+      
+      // Only load completed (Y) or recruiting (N) brokers to ensure consistency and avoid overlap
+      if (participation !== 'Y' && participation !== 'N') continue;
+      
       const consId = (row[8] || '').trim();
       const consName = (row[9] || '').trim();
 
@@ -1705,6 +1709,116 @@ function renderBrokerMarkers() {
   updateMarkersByRadius();
 }
 
+async function renderNationalView(status) {
+  const selectedSido = document.getElementById('sidoSel').value;
+  const targetBrokers = gAgents.filter(b => b.participation === status);
+  
+  const filtered = selectedSido 
+    ? targetBrokers.filter(b => b.addr.includes(selectedSido))
+    : targetBrokers;
+
+  // 1. Geocode missing coords in parallel
+  setLoading(true, `전체 ${status === 'Y' ? '모집완료' : '모집중'} 중개사 위치 정보를 불러오는 중...`);
+  const promises = filtered.map(async (broker) => {
+    if (broker.brokerLat !== null && broker.brokerLng !== null) return;
+    if (!broker.addr) return;
+    const pos = await geocodeAddress(broker.addr);
+    if (pos) {
+      broker.brokerLat = pos.lat;
+      broker.brokerLng = pos.lng;
+    }
+  });
+  await Promise.all(promises);
+  buildSpatialIndex();
+  setLoading(false);
+
+  // 2. Render Markers
+  gAMarkers.forEach(m => m.setMap(null));
+  gAMarkers = [];
+  
+  const bounds = new kakao.maps.LatLngBounds();
+  let validMarkerCount = 0;
+
+  filtered.forEach(broker => {
+    if (broker.brokerLat === null || broker.brokerLng === null) return;
+
+    const m = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(broker.brokerLat, broker.brokerLng),
+      image: broker.participation === 'Y' ? makeCompletedMarkerImage() : makeRecruitingMarkerImage(),
+      zIndex: 15
+    });
+    m.setMap(gMap);
+    
+    kakao.maps.event.addListener(m, 'click', () => {
+      showBrokerOverlay(broker, m);
+    });
+    
+    m.broker = broker;
+    broker._marker = m;
+    gAMarkers.push(m);
+    
+    bounds.extend(m.getPosition());
+    validMarkerCount++;
+  });
+
+  // 3. Fit bounds
+  if (validMarkerCount > 0) {
+    gMap.setBounds(bounds);
+  }
+
+  // 4. Render Sidebar List
+  if (gSelected) {
+    renderNationalList('detailBrokerList', filtered);
+    document.getElementById('detail-broker-count').textContent = `${filtered.length}개`;
+  } else {
+    renderNationalList('branchList', filtered);
+    document.getElementById('branch-count').textContent = filtered.length;
+    // Change panel header text dynamically
+    const headerTitle = document.querySelector('#branchListView .panel-header h3');
+    if (headerTitle) {
+      headerTitle.innerHTML = `🏢 전체 ${status === 'Y' ? '모집완료' : '모집중'} 중개사 목록 (<span id="branch-count">${filtered.length}</span>개)`;
+    }
+  }
+}
+
+function renderNationalList(containerId, filtered) {
+  const listWrap = document.getElementById(containerId);
+  if (!listWrap) return;
+
+  if (filtered.length === 0) {
+    listWrap.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">🏢</div>
+        <div>조건에 맞는 중개사가 없습니다.</div>
+      </div>
+    `;
+    return;
+  }
+
+  listWrap.innerHTML = filtered.map(broker => {
+    const statusDotClass = broker.participation === 'Y' ? 'y' : 'n';
+    const distLabel = broker.distance !== null ? `${broker.distance.toFixed(1)}km` : '-';
+    const fullAddr = [broker.addr, broker.addrDetail].filter(Boolean).join(' ');
+
+    return `
+      <div class="broker-item" onclick="focusBrokerOnMap('${broker.id}')">
+        <div class="broker-status-dot ${statusDotClass}"></div>
+        <div class="broker-body">
+          <div class="broker-name-row">
+            <span class="broker-name">${broker.name}</span>
+            <span class="broker-dist-badge" style="color: var(--muted); background: var(--light); border: 1px solid var(--border); font-size: 11px; font-weight: 700;">${broker.branch} (${distLabel})</span>
+          </div>
+          <div class="broker-info-row">
+            <span class="broker-addr">${fullAddr}</span>
+            <span class="broker-consultant">${broker.consName}</span>
+          </div>
+          ${broker.listings > 0 ? `<div class="broker-listings">📦 매물 ${broker.listings}건</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 /* ── OVERLAYS ── */
 function showBrokerOverlay(broker, marker) {
   if (gOverlay) gOverlay.setMap(null);
@@ -1788,6 +1902,23 @@ async function selectBranchByName(branchName) {
   document.getElementById('branchListView').classList.remove('active');
   document.getElementById('branchDetailView').classList.add('active');
 
+  if (gStatusFilter === 'Y' || gStatusFilter === 'N') {
+    if (gCircle) gCircle.setMap(null);
+    const stats = gBranchStats[branch.store_name] || { completed: 0, recruiting: 0 };
+    const progressPercent = Math.min(Math.round((stats.completed / 50) * 100), 100);
+    document.getElementById('detail-branch-name').textContent = `🏪 ${branch.store_name}`;
+    document.getElementById('detail-branch-addr').textContent = branch.addr;
+    document.getElementById('detail-stats-summary').innerHTML = `
+      모집완료(<span style="color: var(--green); font-weight: 800;">${stats.completed}개</span>), 
+      모집중(<span style="color: var(--yellow); font-weight: 800;">${stats.recruiting}개</span>)
+    `;
+    document.getElementById('detail-progress-percent').textContent = `${progressPercent}%`;
+    document.getElementById('detail-progress-bar').style.width = `${progressPercent}%`;
+
+    await renderNationalView(gStatusFilter);
+    return;
+  }
+
   // Lazy geocode brokers for this branch
   await geocodeBrokersForBranch(branchName);
 
@@ -1838,17 +1969,20 @@ function showBranchList() {
     gCircle = null;
   }
 
-  // Clear Broker Markers
-  gAMarkers.forEach(m => m.setMap(null));
-  gAMarkers = [];
-
   // Switch Panel View
   document.getElementById('branchDetailView').classList.remove('active');
   document.getElementById('branchListView').classList.add('active');
 
-  // Center/Zoom back to Sido branches
-  fitMapToHimart();
-  renderBranchList();
+  if (gStatusFilter === 'Y' || gStatusFilter === 'N') {
+    renderNationalView(gStatusFilter);
+  } else {
+    // Clear Broker Markers
+    gAMarkers.forEach(m => m.setMap(null));
+    gAMarkers = [];
+
+    fitMapToHimart();
+    renderBranchList();
+  }
 }
 
 window.showBranchList = showBranchList;
@@ -1935,6 +2069,15 @@ function renderTopKPIs() {
 }
 
 function renderBranchList() {
+  const headerTitle = document.querySelector('#branchListView .panel-header h3');
+  if (headerTitle) {
+    headerTitle.innerHTML = `🏪 하이마트 지점 목록 (<span id="branch-count">0</span>개)`;
+  }
+
+  if (gStatusFilter === 'Y' || gStatusFilter === 'N') {
+    return; // renderNationalView handles rendering in branchList container
+  }
+
   const listWrap = document.getElementById('branchList');
   const selectedSido = document.getElementById('sidoSel').value;
 
@@ -1983,6 +2126,10 @@ function renderBranchDetail() {
   
   document.getElementById('detail-progress-percent').textContent = `${progressPercent}%`;
   document.getElementById('detail-progress-bar').style.width = `${progressPercent}%`;
+
+  if (gStatusFilter === 'Y' || gStatusFilter === 'N') {
+    return; // renderNationalView handles rendering in detailBrokerList container
+  }
 
   // Filter list by active status filter and radius
   const radius = parseFloat(document.getElementById('radiusSlider').value) || 3.0;
@@ -2054,6 +2201,19 @@ window.focusBrokerOnMap = focusBrokerOnMap;
 function onRegionChange() {
   closeActiveOverlay();
   
+  if (gStatusFilter === 'Y' || gStatusFilter === 'N') {
+    renderNationalView(gStatusFilter);
+    const selectedSido = document.getElementById('sidoSel').value;
+    gHimart.forEach(branch => {
+      const isVisible = !selectedSido || branch.addr.includes(selectedSido);
+      const marker = gHMarkersMap[branch.store_name];
+      if (marker) {
+        marker.setMap(isVisible ? gMap : null);
+      }
+    });
+    return;
+  }
+
   if (gSelected) {
     // If a branch is selected, return to list view if it does not match the filtered region
     const selectedSido = document.getElementById('sidoSel').value;
@@ -2091,12 +2251,25 @@ async function onStatusFilterChange(status) {
 
   closeActiveOverlay();
 
-  if (gSelected) {
-    await geocodeBrokersForBranch(gSelected.store_name);
-    renderBranchDetail();
-    renderBrokerMarkers();
+  // Reset branch selection & radius circle as requested
+  gSelected = null;
+  if (gCircle) {
+    gCircle.setMap(null);
+    gCircle = null;
+  }
+
+  // Always switch to branch list view
+  document.getElementById('branchDetailView').classList.remove('active');
+  document.getElementById('branchListView').classList.add('active');
+
+  if (status === 'Y' || status === 'N') {
+    await renderNationalView(status);
   } else {
-    // If not selected, we don't have broker markers, but we can filter the list if needed
+    // Clear Broker Markers
+    gAMarkers.forEach(m => m.setMap(null));
+    gAMarkers = [];
+
+    fitMapToHimart();
     renderBranchList();
   }
 }
