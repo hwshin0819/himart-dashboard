@@ -1275,6 +1275,7 @@ let gSelected = null;     // Selected Himart branch object
 let gCircle = null;       // Kakao Maps radius circle
 let gOverlay = null;      // Custom info window overlay
 let gStatusFilter = 'all'; // 'all', 'Y', 'N'
+let gBranchStats = {};    // Pre-calculated stats for completed/recruiting brokers per branch
 
 let gHMarkersMap = {};     // Himart branch marker map (store_name -> marker)
 let gAMarkers = [];       // Broker marker objects
@@ -1419,7 +1420,26 @@ async function loadSheetData() {
     }
   }
   gAgents = newAgents;
+  calculateBranchStats();
   console.log(`Loaded ${gAgents.length} active brokers from Sheet 1.`);
+}
+
+function calculateBranchStats() {
+  gBranchStats = {};
+  gHimart.forEach(branch => {
+    gBranchStats[branch.store_name] = { completed: 0, recruiting: 0 };
+  });
+  
+  gAgents.forEach(broker => {
+    const stats = gBranchStats[broker.branch];
+    if (stats) {
+      if (broker.participation === 'Y') {
+        stats.completed++;
+      } else if (broker.participation === 'N') {
+        stats.recruiting++;
+      }
+    }
+  });
 }
 
 async function geocodeBrokersForBranch(branchName) {
@@ -1841,7 +1861,6 @@ function onRadiusSliderInput(val) {
   
   // Real-time updates during drag
   updateMarkersByRadius();
-  updateStatsByRadius();
 }
 
 function updateMarkersByRadius() {
@@ -1867,34 +1886,6 @@ function updateMarkersByRadius() {
       m.setZIndex(10);
     }
   });
-}
-
-function updateStatsByRadius() {
-  if (!gSelected) return;
-  const radius = parseFloat(document.getElementById('radiusSlider').value) || 3.0;
-
-  // Filter brokers for the selected branch and within the radius
-  const branchBrokers = gAgents.filter(broker => broker.branch === gSelected.store_name);
-  const radiusFiltered = branchBrokers.filter(broker => broker.distance !== null && broker.distance <= radius);
-
-  const completed = radiusFiltered.filter(broker => broker.participation === 'Y').length;
-  const recruiting = radiusFiltered.filter(broker => broker.participation === 'N').length;
-  const progressPercent = Math.min(Math.round((completed / 50) * 100), 100);
-
-  // Update real-time stats count summary text
-  const summaryEl = document.getElementById('detail-stats-summary');
-  if (summaryEl) {
-    summaryEl.innerHTML = `
-      모집완료(<span style="color: var(--green); font-weight: 800;">${completed}개</span>), 
-      모집중(<span style="color: var(--yellow); font-weight: 800;">${recruiting}개</span>)
-    `;
-  }
-
-  // Update progress bar
-  const percentEl = document.getElementById('detail-progress-percent');
-  if (percentEl) percentEl.textContent = `${progressPercent}%`;
-  const barEl = document.getElementById('detail-progress-bar');
-  if (barEl) barEl.style.width = `${progressPercent}%`;
 }
 
 function onRadiusSliderChange(val) {
@@ -1961,15 +1952,14 @@ function renderBranchList() {
     return;
   }
 
-  // Calculate completed/recruiting status for each branch
+  // Calculate completed/recruiting status for each branch using gBranchStats
   listWrap.innerHTML = filteredBranches.map(branch => {
-    const branchBrokers = gAgents.filter(broker => broker.branch === branch.store_name);
-    const completed = branchBrokers.filter(broker => broker.participation === 'Y').length;
-    const ratePercent = Math.min(Math.round((completed / 50) * 100), 100);
+    const stats = gBranchStats[branch.store_name] || { completed: 0, recruiting: 0 };
+    const ratePercent = Math.min(Math.round((stats.completed / 50) * 100), 100);
 
     return `
       <div class="branch-item" onclick="selectBranchByName('${branch.store_name}')" style="background: linear-gradient(90deg, #DBEAFE ${ratePercent}%, #FFFFFF ${ratePercent}%);">
-        <span class="branch-item-name">${branch.store_name} (${completed}개)</span>
+        <span class="branch-item-name">${branch.store_name} (${stats.completed}개)</span>
       </div>
     `;
   }).join('');
@@ -1978,31 +1968,27 @@ function renderBranchList() {
 function renderBranchDetail() {
   if (!gSelected) return;
 
-  const radius = parseFloat(document.getElementById('radiusSlider').value) || 3.0;
-
-  // Filter brokers for the selected branch and within the radius
-  const branchBrokers = gAgents.filter(broker => broker.branch === gSelected.store_name);
-  const radiusFiltered = branchBrokers.filter(broker => broker.distance !== null && broker.distance <= radius);
-
-  const completed = radiusFiltered.filter(broker => broker.participation === 'Y').length;
-  const recruiting = radiusFiltered.filter(broker => broker.participation === 'N').length;
-  
-  const progressPercent = Math.min(Math.round((completed / 50) * 100), 100);
+  const stats = gBranchStats[gSelected.store_name] || { completed: 0, recruiting: 0 };
+  const progressPercent = Math.min(Math.round((stats.completed / 50) * 100), 100);
 
   // Fill in detail text
   document.getElementById('detail-branch-name').textContent = `🏪 ${gSelected.store_name}`;
   document.getElementById('detail-branch-addr').textContent = gSelected.addr;
   
-  // Set real-time summary text
+  // Set real-time summary text from gBranchStats
   document.getElementById('detail-stats-summary').innerHTML = `
-    모집완료(<span style="color: var(--green); font-weight: 800;">${completed}개</span>), 
-    모집중(<span style="color: var(--yellow); font-weight: 800;">${recruiting}개</span>)
+    모집완료(<span style="color: var(--green); font-weight: 800;">${stats.completed}개</span>), 
+    모집중(<span style="color: var(--yellow); font-weight: 800;">${stats.recruiting}개</span>)
   `;
   
   document.getElementById('detail-progress-percent').textContent = `${progressPercent}%`;
   document.getElementById('detail-progress-bar').style.width = `${progressPercent}%`;
 
-  // Filter list by active status filter
+  // Filter list by active status filter and radius
+  const radius = parseFloat(document.getElementById('radiusSlider').value) || 3.0;
+  const branchBrokers = gAgents.filter(broker => broker.branch === gSelected.store_name);
+  const radiusFiltered = branchBrokers.filter(broker => broker.distance !== null && broker.distance <= radius);
+
   let finalBrokers = radiusFiltered;
   if (gStatusFilter !== 'all') {
     finalBrokers = finalBrokers.filter(b => b.participation === gStatusFilter);
