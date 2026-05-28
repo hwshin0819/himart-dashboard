@@ -1374,7 +1374,8 @@ function geocodeAddress(address) {
 
 /* ── DATA SERVICES & LAZY LOADERS ── */
 async function loadSheetData() {
-  const popupRaw = await fetchCSV(CFG.SHEET1_URL, false); // Parse without headers to avoid duplicate header conflicts
+  const url = CFG.SHEET1_URL + "&cachebust=" + Date.now();
+  const popupRaw = await fetchCSV(url, false); // Parse without headers to avoid duplicate header conflicts
   const newAgents = [];
   
   if (popupRaw && popupRaw.length > 1) {
