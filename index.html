@@ -407,6 +407,10 @@
       color: var(--text);
     }
 
+    .btn-refresh:hover {
+      transform: rotate(180deg);
+    }
+
     /* List Wrapper */
     .list-wrap {
       flex: 1;
@@ -1052,9 +1056,13 @@
   <!-- Top Header Dashboard -->
   <header class="app-header">
     <div class="logo-area">
-      <h1 class="logo-title" style="color: #000000; font-weight: 400;">
+      <h1 class="logo-title" style="color: #000000; font-weight: 400; margin-bottom: 2px;">
         프롭티어 X 롯데하이마트 제휴 중개사모집
       </h1>
+      <div class="update-info-bar" style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); margin-top: 4px;">
+        <span id="last-update-time">🕐 마지막 업데이트: -</span>
+        <button class="btn-refresh" onclick="onRefreshData()" style="border: none; background: transparent; cursor: pointer; font-size: 13px; padding: 2px; transition: transform 0.2s;" title="새로고침">🔄</button>
+      </div>
     </div>
     
     <div class="kpi-grid">
@@ -1209,8 +1217,7 @@
 <script>
 /* ── CONFIGURATION ── */
 const CFG = {
-  COORD_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRUsqghnapaMm7WMoR7fRfdacrNQBsXSBp9nH-s1awVW2kZgEfTopzRQzoNLGnwITxHCq8fG-DDYmNS/pub?gid=433284289&single=true&output=csv',
-  POPUP_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSzQapT-wpPEFA5ZAxI6fgVtOfKH7kOvBcOyxWVU7w-VcifimZa8bDLBCNjf-r9yhLXNLm-OsQn2LS3/pub?gid=0&single=true&output=csv',
+  SHEET1_URL: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSzQapT-wpPEFA5ZAxI6fgVtOfKH7kOvBcOyxWVU7w-VcifimZa8bDLBCNjf-r9yhLXNLm-OsQn2LS3/pub?gid=0&single=true&output=csv',
   HIMART_BRANCHES: [
     { store_name: '미아사거리', addr: '서울특별시 강북구 도봉로 10', branchLat: 37.6099513, branchLng: 127.0307965 },
     { store_name: '구리역', addr: '경기도 구리시 경춘로 268', branchLat: 37.6021574, branchLng: 127.1449179 },
@@ -1364,6 +1371,132 @@ function geocodeAddress(address) {
     });
   });
 }
+
+/* ── DATA SERVICES & LAZY LOADERS ── */
+async function loadSheetData() {
+  const popupRaw = await fetchCSV(CFG.SHEET1_URL, false); // Parse without headers to avoid duplicate header conflicts
+  const newAgents = [];
+  
+  if (popupRaw && popupRaw.length > 1) {
+    // Start from index 1 to skip header row
+    for (let i = 1; i < popupRaw.length; i++) {
+      const row = popupRaw[i];
+      if (!row || row.length < 2) continue;
+
+      const id = (row[0] || '').trim();
+      const name = (row[1] || '').trim();
+      const addr = (row[2] || '').trim();
+      const addrDetail = (row[3] || '').trim();
+      const branch = (row[4] || '').trim();
+      const distanceVal = parseFloat(row[5]);
+      const listings = parseInt(row[6]) || 0;
+      const participation = (row[7] || '').trim().toUpperCase(); // Y or N
+      const consId = (row[8] || '').trim();
+      const consName = (row[9] || '').trim();
+
+      if (!id || !name) continue;
+
+      // Keep existing coordinates if already geocoded (to prevent losing coordinates on refresh)
+      const existing = gAgents.find(a => a.id === id);
+      const brokerLat = existing ? existing.brokerLat : null;
+      const brokerLng = existing ? existing.brokerLng : null;
+
+      newAgents.push({
+        id,
+        name,
+        addr,
+        addrDetail,
+        branch,
+        distance: !isNaN(distanceVal) ? distanceVal : null,
+        listings,
+        participation,
+        consId,
+        consName,
+        brokerLat,
+        brokerLng
+      });
+    }
+  }
+  gAgents = newAgents;
+  console.log(`Loaded ${gAgents.length} active brokers from Sheet 1.`);
+}
+
+async function geocodeBrokersForBranch(branchName) {
+  const branchBrokers = gAgents.filter(b => b.branch === branchName);
+  
+  // Sort by distance and limit to 500 for display
+  branchBrokers.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+  const targetBrokers = branchBrokers.slice(0, 500);
+
+  const promises = targetBrokers.map(async (broker) => {
+    if (broker.brokerLat !== null && broker.brokerLng !== null) {
+      return; // Already geocoded
+    }
+    if (!broker.addr) return;
+    
+    const pos = await geocodeAddress(broker.addr);
+    if (pos) {
+      broker.brokerLat = pos.lat;
+      broker.brokerLng = pos.lng;
+    }
+  });
+
+  await Promise.all(promises);
+  
+  // Re-build Spatial Index for the updated coordinates
+  buildSpatialIndex();
+}
+
+function updateRefreshTime() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const hh = String(now.getHours()).padStart(2, '0');
+  const min = String(now.getMinutes()).padStart(2, '0');
+  
+  const timeEl = document.getElementById('last-update-time');
+  if (timeEl) {
+    timeEl.textContent = `🕐 마지막 업데이트: ${yyyy}.${mm}.${dd} ${hh}:${min}`;
+  }
+}
+
+async function onRefreshData() {
+  const btn = document.querySelector('.btn-refresh');
+  if (btn) btn.style.transform = 'rotate(360deg)';
+  
+  try {
+    setLoading(true, '데이터를 갱신하는 중...');
+    
+    // Re-fetch Sheet 1
+    await loadSheetData();
+    
+    // If a branch is currently selected, re-run lazy geocode and renders
+    if (gSelected) {
+      await geocodeBrokersForBranch(gSelected.store_name);
+      renderBranchDetail();
+      renderBrokerMarkers();
+    } else {
+      renderBranchList();
+    }
+    renderTopKPIs();
+    
+    // Update time
+    updateRefreshTime();
+    
+    setLoading(false);
+  } catch (error) {
+    console.error('Refresh data process failed:', error);
+    setLoading(true, '오류 발생', '데이터를 새로고치는 도중 오류가 발생했습니다: ' + error.message);
+    setTimeout(() => setLoading(false), 2000);
+  } finally {
+    if (btn) {
+      setTimeout(() => { btn.style.transform = 'none'; }, 500);
+    }
+  }
+}
+
+window.onRefreshData = onRefreshData;
 
 /* ── MARKER STYLING & GENERATION ── */
 const _markerImageCache = {};
@@ -1612,12 +1745,30 @@ function closeActiveOverlay() {
 window.closeActiveOverlay = closeActiveOverlay;
 
 /* ── SELECTIONS & VIEW SWAP ── */
-function selectBranchByName(branchName) {
+async function selectBranchByName(branchName) {
   const branch = gHimart.find(b => b.store_name === branchName);
   if (!branch) return;
 
   gSelected = branch;
   closeActiveOverlay();
+
+  // Show temporary spinner indicator in broker list container
+  const detailBrokerList = document.getElementById('detailBrokerList');
+  if (detailBrokerList) {
+    detailBrokerList.innerHTML = `
+      <div style="padding: 40px; text-align: center; color: var(--muted);">
+        <div class="spinner" style="width: 24px; height: 24px; margin: 0 auto 12px auto; border: 2px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
+        <div style="font-size: 13px; font-weight: 500;">중개사 위치 정보를 불러오는 중...</div>
+      </div>
+    `;
+  }
+
+  // Switch Panel View
+  document.getElementById('branchListView').classList.remove('active');
+  document.getElementById('branchDetailView').classList.add('active');
+
+  // Lazy geocode brokers for this branch
+  await geocodeBrokersForBranch(branchName);
 
   // Draw Circle
   const savedRad = localStorage.getItem(`himart_radius_${branch.store_name}`);
@@ -1646,15 +1797,11 @@ function selectBranchByName(branchName) {
   gMap.setLevel(zoomLevel);
   gMap.setCenter(new kakao.maps.LatLng(branch.branchLat, branch.branchLng));
 
-  // Switch Panel View
-  document.getElementById('branchListView').classList.remove('active');
-  document.getElementById('branchDetailView').classList.add('active');
-
   // Fill in Slider values
   document.getElementById('radiusSlider').value = radius;
   document.getElementById('radiusVal').textContent = `${radius.toFixed(1)} km`;
 
-  // Render
+  // Render detail and markers
   renderBranchDetail();
   renderBrokerMarkers();
 }
@@ -1946,7 +2093,7 @@ function onRegionChange() {
   });
 }
 
-function onStatusFilterChange(status) {
+async function onStatusFilterChange(status) {
   gStatusFilter = status;
   
   // Set active buttons
@@ -1958,6 +2105,7 @@ function onStatusFilterChange(status) {
   closeActiveOverlay();
 
   if (gSelected) {
+    await geocodeBrokersForBranch(gSelected.store_name);
     renderBranchDetail();
     renderBrokerMarkers();
   } else {
@@ -1984,76 +2132,10 @@ async function start() {
     gHimart = CFG.HIMART_BRANCHES.map(b => ({ ...b }));
     console.log(`Loaded ${gHimart.length} Himart branches.`);
 
-    // 2. Load Coordinate Lookup (19,000 sheet)
-    setLoading(true, '중개사 좌표 데이터를 불러오는 중...', '약 19,000건의 매핑 테이블을 로드합니다.');
-    const coordRaw = await fetchCSV(CFG.COORD_URL);
-    const coordMap = new Map();
-    if (coordRaw && coordRaw.length > 0) {
-      const idKey = findColumn(coordRaw[0], ['회원번호', 'ID', 'id']);
-      const latKey = findColumn(coordRaw[0], ['위도', 'LAT', 'lat']);
-      const lngKey = findColumn(coordRaw[0], ['경도', 'LNG', 'lng']);
-      
-      coordRaw.forEach(row => {
-        const id = (row[idKey] || '').trim();
-        const lat = parseFloat(row[latKey]);
-        const lng = parseFloat(row[lngKey]);
-        if (id && !isNaN(lat) && !isNaN(lng)) {
-          coordMap.set(id, { lat, lng });
-        }
-      });
-    }
-    console.log(`Loaded ${coordMap.size} coordinate mapping entries.`);
-
-    // 3. Load Popup brokerage sheet (New Sheet 2)
-    setLoading(true, '팝업 노출 중개사 데이터를 불러오는 중...');
-    const popupRaw = await fetchCSV(CFG.POPUP_URL, false); // Parse without headers to avoid duplicate header conflicts
-    gAgents = [];
-    
-    if (popupRaw && popupRaw.length > 1) {
-      // Start from index 1 to skip header row
-      for (let i = 1; i < popupRaw.length; i++) {
-        const row = popupRaw[i];
-        if (!row || row.length < 2) continue;
-
-        const id = (row[0] || '').trim();
-        const name = (row[1] || '').trim();
-        const addr = (row[2] || '').trim();
-        const addrDetail = (row[3] || '').trim();
-        const branch = (row[4] || '').trim();
-        const distanceVal = parseFloat(row[5]);
-        const listings = parseInt(row[6]) || 0;
-        const participation = (row[7] || '').trim().toUpperCase(); // Y or N
-        const consId = (row[8] || '').trim();
-        const consName = (row[9] || '').trim();
-
-        if (!id || !name) continue;
-
-        // Coordinates Join
-        let pos = coordMap.get(id) || null;
-        
-        // Fallback dynamic geocode search
-        if (!pos && addr) {
-          console.warn(`Coordinates not found in lookup for: ${id} (${name}). Trying geocoder fallback...`);
-          pos = await geocodeAddress(addr);
-        }
-
-        gAgents.push({
-          id,
-          name,
-          addr,
-          addrDetail,
-          branch,
-          distance: !isNaN(distanceVal) ? distanceVal : null,
-          listings,
-          participation,
-          consId,
-          consName,
-          brokerLat: pos ? pos.lat : null,
-          brokerLng: pos ? pos.lng : null
-        });
-      }
-    }
-    console.log(`Successfully mapped ${gAgents.length} active popup brokers.`);
+    // 2. Load Broker Data (Sheet 1)
+    setLoading(true, '중개사 데이터를 불러오는 중...');
+    await loadSheetData();
+    updateRefreshTime();
 
     setLoading(true, '공간 인덱스 및 지도 컴포넌트를 빌드하는 중...');
     buildSpatialIndex();
